@@ -45,16 +45,17 @@ class MockUwbService {
     final random = Random();
     const mockDeviceId = 'UWB-TAG-test'; // ダミーの識別子
     
-    double currentDistance = 3.0;
+    double currentDistance = 2.0;
     double currentAzimuth = 0.0;
     double currentElevation = 0.0;
 
     while (true) {
-      await Future.delayed(const Duration(milliseconds: 500)); 
+      await Future.delayed(const Duration(milliseconds: 100)); 
       
       // 距離の変動
-      currentDistance += (random.nextDouble() - 0.5);
+      currentDistance += (random.nextDouble() * 0.1 - 0.5);
       if (currentDistance < 0) currentDistance = 0.0;
+      if (currentDistance > 3.0) currentDistance = 3.0;
 
       // 水平角度（左右）の変動：-180度（真後ろ）〜 180度まで大きく動かす
       currentAzimuth += (random.nextDouble() * 40 - 20);
