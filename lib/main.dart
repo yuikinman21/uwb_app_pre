@@ -24,87 +24,91 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+class MockUwbService {
+  Stream<double> get distanceStream async* {
+    final random = Random();
+    double currentDistance = 3.0; // 初期値3メートル
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
+    while (true) {
+      await Future.delayed(const Duration(milliseconds: 500)); // 0.5秒ごとに更新
+      
+      // -0.5m 〜 +0.5m の範囲で距離がランダムに変動するダミーロジック
+      double change = (random.nextDouble() - 0.5); 
+      currentDistance += change;
+      
+      // 0m以下にならないように調整
+      if (currentDistance < 0) currentDistance = 0.0;
+      
+      yield currentDistance; // 画面側に距離を通知
+    }
+  }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class UwbDistanceScreen extends StatelessWidget {
+  final MockUwbService _uwbService = MockUwbService();
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+  UwbDistanceScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('UWBレーダー（テスト版）'),
+        backgroundColor: Colors.blueGrey,
+        foregroundColor: Colors.white,
       ),
       body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
+        child: StreamBuilder<double>(
+          stream: _uwbService.distanceStream, // ダミーの距離データを受信
+          builder: (context, snapshot) {
+            // データがまだ来ていない時のロード画面
+            if (!snapshot.hasData) {
+              return const CircularProgressIndicator();
+            }
+
+            // 受信した距離データ（小数点2桁まで丸める）
+            final distance = snapshot.data!;
+            final formattedDistance = distance.toStringAsFixed(2);
+            
+            // 1.5m以内かどうかを判定
+            final isClose = distance < 1.5;
+
+            return Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.radar, 
+                  size: 100, 
+                  color: isClose ? Colors.red : Colors.blueGrey,
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'デバイスまでの距離', 
+                  style: TextStyle(fontSize: 24, color: Colors.grey)
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '$formattedDistance m',
+                  style: TextStyle(
+                    fontSize: 72, 
+                    fontWeight: FontWeight.bold,
+                    // 1.5m以内なら文字を赤く、それ以外は黒にする
+                    color: isClose ? Colors.red : Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  isClose ? '⚠️ 接近しています！' : '安全な距離です',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: isClose ? Colors.red : Colors.transparent, // 遠い時は見えなくする
+                  ),
+                ),
+              ],
+            );
+          },
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
       ),
     );
   }
