@@ -53,7 +53,9 @@ class MockUwbService {
       await Future.delayed(const Duration(milliseconds: 100)); 
       
       // 距離の変動
-      currentDistance += (random.nextDouble() * 0.1 - 0.5);
+      double randomNoise = (random.nextDouble() * 0.1 - 0.05);
+      double springForce = (1.5 - currentDistance) * 0.01;
+      currentDistance += (randomNoise + springForce);
       if (currentDistance < 0) currentDistance = 0.0;
       if (currentDistance > 3.0) currentDistance = 3.0;
 
