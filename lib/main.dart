@@ -24,12 +24,19 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// 1. 距離と角度をまとめたデータ用の「箱（クラス）」
+// 1. UWBの取得データを格納するクラス
 class UwbData {
-  final double distance; // メートル
-  final double angle;    // 角度（度: -90が左、0が真正面、90が右）
+  final String deviceId;     // デバイスの識別子
+  final double distance;     // 距離（メートル）
+  final double? azimuth;     // 水平角度（左右）※nullになる可能性あり
+  final double? elevation;   // 垂直角度（上下）※nullになる可能性あり
 
-  UwbData({required this.distance, required this.angle});
+  UwbData({
+    required this.deviceId,
+    required this.distance,
+    this.azimuth,
+    this.elevation,
+  });
 }
 
 // 2. 距離と角度の「両方」を発行するダミークラス
