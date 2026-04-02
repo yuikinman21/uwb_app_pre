@@ -58,12 +58,12 @@ class MockUwbService {
       if (currentDistance > 3.0) currentDistance = 3.0;
 
       // 水平角度（左右）の変動：-180度（真後ろ）〜 180度まで大きく動かす
-      currentAzimuth += (random.nextDouble() * 40 - 20);
+      currentAzimuth += (random.nextDouble() * 4 - 2);
       if (currentAzimuth > 180) currentAzimuth -= 360;
       if (currentAzimuth < -180) currentAzimuth += 360;
 
       // 垂直角度（上下）の変動：-90度（真下）〜 90度（真上）
-      currentElevation += (random.nextDouble() * 20 - 10);
+      currentElevation += (random.nextDouble() * 2 - 1);
       if (currentElevation > 90) currentElevation = 90;
       if (currentElevation < -90) currentElevation = -90;
 
