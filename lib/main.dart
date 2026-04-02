@@ -39,33 +39,49 @@ class UwbData {
   });
 }
 
-// 2. 距離と角度の「両方」を発行するダミークラス
+// 2. 本番環境をシミュレートしたモックサービス
 class MockUwbService {
   Stream<UwbData> get uwbStream async* {
     final random = Random();
-    double currentDistance = 3.0; // 初期値: 真正面に3m
-    double currentAngle = 0.0;
+    const mockDeviceId = 'UWB-TAG-test'; // ダミーの識別子
+    
+    double currentDistance = 3.0;
+    double currentAzimuth = 0.0;
+    double currentElevation = 0.0;
 
     while (true) {
       await Future.delayed(const Duration(milliseconds: 500)); 
       
-      // 距離の変動（±0.5m）
+      // 距離の変動
       currentDistance += (random.nextDouble() - 0.5);
       if (currentDistance < 0) currentDistance = 0.0;
 
-      // 角度の変動（±15度ずつフラフラ動く）
-      currentAngle += (random.nextDouble() * 30 - 15);
-      // スマホの前方180度（-90度 〜 90度）の範囲に収める
-      if (currentAngle > 90) currentAngle = 90;
-      if (currentAngle < -90) currentAngle = -90;
-      
-      // 距離と角度をセットにして画面へ通知
-      yield UwbData(distance: currentDistance, angle: currentAngle);
+      // 水平角度（左右）の変動：-180度（真後ろ）〜 180度まで大きく動かす
+      currentAzimuth += (random.nextDouble() * 40 - 20);
+      if (currentAzimuth > 180) currentAzimuth -= 360;
+      if (currentAzimuth < -180) currentAzimuth += 360;
+
+      // 垂直角度（上下）の変動：-90度（真下）〜 90度（真上）
+      currentElevation += (random.nextDouble() * 20 - 10);
+      if (currentElevation > 90) currentElevation = 90;
+      if (currentElevation < -90) currentElevation = -90;
+
+      // 【重要】アンテナの指向性シミュレーション
+      // デバイスが視界（正面の左右60度以内）から外れると、方向(角度)を見失う(nullになる)
+      bool isDirectionAvailable = currentAzimuth.abs() <= 60;
+
+      yield UwbData(
+        deviceId: mockDeviceId,
+        distance: currentDistance,
+        // 方向を見失った場合は null を返す
+        azimuth: isDirectionAvailable ? currentAzimuth : null,
+        elevation: isDirectionAvailable ? currentElevation : null,
+      );
     }
   }
 }
 
-// 3. UI（レーダーと数値の表示）
+// 3. 全データを視覚化するUI
 class UwbRadarScreen extends StatelessWidget {
   final MockUwbService _uwbService = MockUwbService();
 
@@ -75,82 +91,123 @@ class UwbRadarScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('UWB 空間レーダー'),
-        backgroundColor: Colors.blueGrey,
+        title: const Text('Nearby Interaction Mock'),
+        backgroundColor: Colors.black87,
         foregroundColor: Colors.white,
       ),
       body: Center(
         child: StreamBuilder<UwbData>(
           stream: _uwbService.uwbStream,
           builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return const CircularProgressIndicator();
-            }
+            if (!snapshot.hasData) return const CircularProgressIndicator();
 
-            // データの取り出し
             final data = snapshot.data!;
-            final distance = data.distance;
-            final angle = data.angle;
+            final formattedDistance = data.distance.toStringAsFixed(2);
             
-            final formattedDistance = distance.toStringAsFixed(2);
-            final formattedAngle = angle.toStringAsFixed(0);
-            final isClose = distance < 1.5;
+            // 方向データが取得できているか（nullじゃないか）
+            final hasDirection = data.azimuth != null && data.elevation != null;
 
-            return Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // --- 視覚的フィードバック（ナビゲーションアイコン） ---
-                Transform.rotate(
-                  // Flutterの回転は「ラジアン」を使うため、度数を変換 (角度 * π / 180)
-                  angle: angle * (pi / 180),
-                  child: Icon(
-                    Icons.navigation, // アイコン
-                    size: 120, 
-                    color: isClose ? Colors.red : Colors.blueAccent,
-                  ),
-                ),
-                const SizedBox(height: 40),
+            return Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // --- デバイス情報 ---
+                  Text('Target: ${data.deviceId}', style: const TextStyle(color: Colors.grey)),
+                  const SizedBox(height: 20),
 
-                // --- 数値データの表示 ---
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(15),
+                  // --- 視覚的フィードバックエリア ---
+                  SizedBox(
+                    height: 200,
+                    child: hasDirection 
+                      ? _buildDirectionalUI(data.azimuth!, data.elevation!, data.distance)
+                      : _buildLostDirectionUI(), // 方向を見失った時のUI
                   ),
-                  child: Column(
-                    children: [
-                      const Text('デバイスの位置', style: TextStyle(fontSize: 18, color: Colors.grey)),
-                      const SizedBox(height: 10),
-                      Text(
-                        '$formattedDistance m',
-                        style: TextStyle(
-                          fontSize: 60, 
-                          fontWeight: FontWeight.bold,
-                          color: isClose ? Colors.red : Colors.black87,
+                  const SizedBox(height: 30),
+
+                  // --- 数値データの詳細表示 ---
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text('距離 (Distance)', style: TextStyle(color: Colors.grey)),
+                        Text('$formattedDistance m', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold)),
+                        const Divider(height: 30),
+                        
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _buildAngleText('水平 (左右)', data.azimuth),
+                            _buildAngleText('垂直 (上下)', data.elevation),
+                          ],
                         ),
-                      ),
-                      Text(
-                        // 角度がマイナスなら「左」、プラスなら「右」と表示
-                        angle < 0 
-                          ? '左に ${angle.abs().toStringAsFixed(0)}°' 
-                          : '右に $formattedAngle°',
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w500),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                
-                const SizedBox(height: 20),
-                Text(
-                  isClose ? '⚠️ 接近しています！' : '',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.red),
-                ),
-              ],
+                ],
+              ),
             );
           },
         ),
       ),
+    );
+  }
+
+  // 方向が見えている時のUI（矢印と上下のアイコン）
+  Widget _buildDirectionalUI(double azimuth, double elevation, double distance) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // 垂直（上下）のインジケーター
+        Icon(
+          elevation > 10 ? Icons.arrow_drop_up : (elevation < -10 ? Icons.arrow_drop_down : Icons.horizontal_rule),
+          color: Colors.orange,
+          size: 40,
+        ),
+        // 水平（左右）の回転矢印
+        Transform.rotate(
+          angle: azimuth * (pi / 180),
+          child: Icon(
+            Icons.navigation,
+            size: 100, 
+            color: distance < 1.5 ? Colors.red : Colors.blueAccent,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // 方向を見失った時のUI
+  Widget _buildLostDirectionUI() {
+    return const Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.screen_rotation, size: 80, color: Colors.grey),
+        SizedBox(height: 10),
+        Text(
+          '方向を見失いました\niPhoneを左右に振って探してください',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+        ),
+      ],
+    );
+  }
+
+  // 角度をテキスト表示する補助メソッド
+  Widget _buildAngleText(String label, double? angle) {
+    return Column(
+      children: [
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        Text(
+          angle != null ? '${angle.toStringAsFixed(1)}°' : '---',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: angle != null ? Colors.black : Colors.grey),
+        ),
+      ],
     );
   }
 }
