@@ -69,16 +69,11 @@ class MockUwbService {
       if (currentElevation > 90) currentElevation = 90;
       if (currentElevation < -90) currentElevation = -90;
 
-      // 【重要】アンテナの指向性シミュレーション
-      // デバイスが視界（正面の左右60度以内）から外れると、方向(角度)を見失う(nullになる)
-      bool isDirectionAvailable = currentAzimuth.abs() <= 60;
-
       yield UwbData(
         deviceId: mockDeviceId,
         distance: currentDistance,
-        // 方向を見失った場合は null を返す
-        azimuth: isDirectionAvailable ? currentAzimuth : null,
-        elevation: isDirectionAvailable ? currentElevation : null,
+        azimuth: currentAzimuth,
+        elevation: currentElevation,
       );
     }
   }
