@@ -157,6 +157,7 @@ class _UwbRadarScreenState extends State<UwbRadarScreen> {
     setState(() {
       _isRecording = false;
     });
+    print('合計記録件数: ${_csvRows.length} 行');
 
     if (_csvRows.isEmpty) return;
 
