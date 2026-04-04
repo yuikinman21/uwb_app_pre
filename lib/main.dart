@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:path:_provider/path_provider.dart';
 
 void main() {
   runApp(const MyApp());
@@ -20,7 +20,7 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
         useMaterial3: true,
       ),
-      home: const UwbRadarScreen(),
+      home: UwbRadarScreen(),
       debugShowCheckedModeBanner: false,
     );
   }
@@ -61,7 +61,7 @@ class MockUwbService {
       if (currentDistance < 0) currentDistance = 0.0;
       if (currentDistance > 3.0) currentDistance = 3.0;
 
-      // 水平角度の変動
+      // 水平角度（左右）の変動：-180度（真後ろ）〜 180度まで大きく動かす
       currentAzimuth += (random.nextDouble() * 4 - 2);
       if (currentAzimuth > 180) currentAzimuth -= 360;
       if (currentAzimuth < -180) currentAzimuth += 360;
@@ -86,98 +86,11 @@ class MockUwbService {
   }
 }
 
-// 3. UI画面
-class UwbRadarScreen extends StatefulWidget {
-  const UwbRadarScreen({super.key});
-
-  @override
-  State<UwbRadarScreen> createState() => _UwbRadarScreenState();
-}
-
-class _UwbRadarScreenState extends State<UwbRadarScreen> {
+// 3. 全データを視覚化するUI
+class UwbRadarScreen extends StatelessWidget {
   final MockUwbService _uwbService = MockUwbService();
-  StreamSubscription<UwbData>? _streamSubscription;
-  UwbData? _currentData; // 画面表示用の最新データ
 
-  // --- 記録用の状態管理変数 ---
-  bool _isRecording = false;
-  List<String> _csvRows = []; // メモリ上でCSVデータを蓄積するリスト
-  List<File> _csvFiles = [];  // 保存済みのCSVファイルリスト
-
-  @override
-  void initState() {
-    super.initState();
-    _loadHistory(); // 起動時に過去のCSVファイルを探す
-
-    // StreamBuilderの代わりに手動でStreamを監視し、表示更新とデータ記録を同時に行う
-    _streamSubscription = _uwbService.uwbStream.listen((data) {
-      setState(() {
-        _currentData = data;
-      });
-
-      // 記録中なら、CSVの行としてデータを追加
-      if (_isRecording) {
-        final timestamp = DateTime.now().millisecondsSinceEpoch; // Unixタイムスタンプ
-        // 欠損値(null)の場合は空文字として記録
-        _csvRows.add('$timestamp,${data.deviceId},${data.distance},${data.azimuth ?? ""},${data.elevation ?? ""}');
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _streamSubscription?.cancel();
-    super.dispose();
-  }
-
-  // アプリ内ディレクトリから既存のCSVを探すメソッド
-  Future<void> _loadHistory() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final files = directory.listSync()
-        .whereType<File>()
-        .where((f) => f.path.endsWith('.csv'))
-        .toList();
-    setState(() {
-      _csvFiles = files;
-    });
-  }
-
-  // --- 記録開始ボタンの処理 ---
-  void _startRecording() {
-    setState(() {
-      _isRecording = true;
-      _csvRows.clear();
-      // 1行目にヘッダーを追加
-      _csvRows.add('timestamp,device_id,distance,azimuth,elevation');
-    });
-  }
-
-  // --- 記録終了ボタンの処理 ---
-  Future<void> _stopRecording() async {
-    setState(() {
-      _isRecording = false;
-    });
-
-    if (_csvRows.isEmpty) return;
-
-    // ファイルの保存処理
-    final directory = await getApplicationDocumentsDirectory();
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final file = File('${directory.path}/uwb_log_$timestamp.csv');
-
-    // リストに溜めた文字列を改行で繋いで一気に書き込む
-    await file.writeAsString(_csvRows.join('\n'));
-
-    setState(() {
-      _csvFiles.add(file); // 履歴リストに追加
-    });
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('CSVを保存しました\n${file.path.split('/').last}')),
-      );
-    }
-  }
+  UwbRadarScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -187,121 +100,81 @@ class _UwbRadarScreenState extends State<UwbRadarScreen> {
         backgroundColor: Colors.black87,
         foregroundColor: Colors.white,
       ),
-      // データが来るまではローディング表示
       body: Center(
-        child: _currentData == null 
-          ? const CircularProgressIndicator()
-          : _buildBody(_currentData!),
+        child: StreamBuilder<UwbData>(
+          stream: _uwbService.uwbStream,
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) return const CircularProgressIndicator();
+
+            final data = snapshot.data!;
+            final formattedDistance = data.distance.toStringAsFixed(2);
+            
+            // 方向データが取得できているか（nullじゃないか）
+            final hasDirection = data.azimuth != null && data.elevation != null;
+
+            return Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // --- デバイス情報 ---
+                  Text('Target: ${data.deviceId}', style: const TextStyle(color: Colors.grey)),
+                  const SizedBox(height: 20),
+
+                  // --- 視覚的フィードバックエリア ---
+                  SizedBox(
+                    height: 200,
+                    child: hasDirection 
+                      ? _buildDirectionalUI(data.azimuth!, data.elevation!, data.distance)
+                      : _buildLostDirectionUI(), // 方向を見失った時のUI
+                  ),
+                  const SizedBox(height: 30),
+
+                  // --- 数値データの詳細表示 ---
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text('距離 (Distance)', style: TextStyle(color: Colors.grey)),
+                        Text('$formattedDistance m', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold)),
+                        const Divider(height: 30),
+                        
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            _buildAngleText('水平 (左右)', data.azimuth),
+                            _buildAngleText('垂直 (上下)', data.elevation),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
 
-  // 画面のメイン要素
-  Widget _buildBody(UwbData data) {
-    final formattedDistance = data.distance.toStringAsFixed(2);
-    final hasDirection = data.azimuth != null && data.elevation != null;
-
-    return Padding(
-      padding: const EdgeInsets.all(20.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // --- デバイス情報 ---
-          Text('Target: ${data.deviceId}', style: const TextStyle(color: Colors.grey)),
-          const SizedBox(height: 20),
-
-          // --- 視覚的フィードバックエリア ---
-          SizedBox(
-            height: 200,
-            child: hasDirection 
-              ? _buildDirectionalUI(data.azimuth!, data.elevation!, data.distance)
-              : _buildLostDirectionUI(), 
-          ),
-          const SizedBox(height: 30),
-
-          // --- 数値データの詳細表示 ---
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade200,
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Column(
-              children: [
-                const Text('距離 (Distance)', style: TextStyle(color: Colors.grey)),
-                Text('$formattedDistance m', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold)),
-                const Divider(height: 30),
-                
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildAngleText('水平 (左右)', data.azimuth),
-                    _buildAngleText('垂直 (上下)', data.elevation),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 30),
-
-          // ==========================================
-          // ここからが追加したボタンの出し分けUI
-          // ==========================================
-          
-          if (_isRecording)
-            ElevatedButton.icon(
-              onPressed: _stopRecording,
-              icon: const Icon(Icons.stop),
-              label: const Text('記録終了して保存'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-              ),
-            )
-          else
-            ElevatedButton.icon(
-              onPressed: _startRecording,
-              icon: const Icon(Icons.fiber_manual_record),
-              label: const Text('記録開始'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-              ),
-            ),
-
-          const SizedBox(height: 15),
-
-          // 記録中ではなく、かつ保存済みのCSVファイルが存在する場合のみ表示
-          if (!_isRecording && _csvFiles.isNotEmpty)
-            OutlinedButton.icon(
-              onPressed: () {
-                // TODO: 履歴一覧・プレビュー画面への遷移処理
-                // 今回は簡易的に件数をスナックバーで表示
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('保存済みのCSVファイル: ${_csvFiles.length}件')),
-                );
-              },
-              icon: const Icon(Icons.folder),
-              label: const Text('記録履歴確認'),
-            ),
-        ],
-      ),
-    );
-  }
-
-  // --- 既存のUIウィジェットメソッド ---
+  // 方向が見えている時のUI（矢印と上下のアイコン）
   Widget _buildDirectionalUI(double azimuth, double elevation, double distance) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        // 垂直（上下）のインジケーター
         Icon(
           elevation > 10 ? Icons.arrow_drop_up : (elevation < -10 ? Icons.arrow_drop_down : Icons.horizontal_rule),
           color: Colors.orange,
           size: 40,
         ),
+        // 水平（左右）の回転矢印
         Transform.rotate(
           angle: azimuth * (pi / 180),
           child: Icon(
@@ -314,6 +187,7 @@ class _UwbRadarScreenState extends State<UwbRadarScreen> {
     );
   }
 
+  // 方向を見失った時のUI
   Widget _buildLostDirectionUI() {
     return const Column(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -329,6 +203,7 @@ class _UwbRadarScreenState extends State<UwbRadarScreen> {
     );
   }
 
+  // 角度をテキスト表示する補助メソッド
   Widget _buildAngleText(String label, double? angle) {
     return Column(
       children: [
