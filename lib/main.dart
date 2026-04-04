@@ -168,6 +168,10 @@ class _UwbRadarScreenState extends State<UwbRadarScreen> {
     // リストに溜めた文字列を改行で繋いで一気に書き込む
     await file.writeAsString(_csvRows.join('\n'));
 
+    print('--- 📝 保存されたCSVの中身 (${file.path}) ---');
+    print(await file.readAsString());
+    print('-------------------------------------------');
+
     setState(() {
       _csvFiles.add(file); // 履歴リストに追加
     });
