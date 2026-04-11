@@ -167,65 +167,83 @@ class _UwbRadarScreenState extends State<UwbRadarScreen> {
           },),
         ],
       ),
-      body: Center(
-        child: StreamBuilder<UwbData>(
-          stream: _uwbService.uwbStream,
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) return const CircularProgressIndicator();
+      body: data == null 
+        ? const Center(child: CircularProgressIndicator())
+        : Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('Target: ${data.deviceId}', style: const TextStyle(color: Colors.grey)),
+                const SizedBox(height: 20),
 
-            final data = snapshot.data!;
-            final formattedDistance = data.distance.toStringAsFixed(2);
-            
-            // 方向データが取得できているか（nullじゃないか）
-            final hasDirection = data.azimuth != null && data.elevation != null;
+                // 視覚的UI
+                SizedBox(
+                  height: 180,
+                  child: data.azimuth != null 
+                    ? _buildDirectionalUI(data.azimuth!, data.elevation!, data.distance)
+                    : _buildLostDirectionUI(),
+                ),
+                
+                const SizedBox(height: 30),
 
-            return Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // --- デバイス情報 ---
-                  Text('Target: ${data.deviceId}', style: const TextStyle(color: Colors.grey)),
-                  const SizedBox(height: 20),
+                // 数値データエリア
+                _buildDataCard(data),
 
-                  // --- 視覚的フィードバックエリア ---
-                  SizedBox(
-                    height: 200,
-                    child: hasDirection 
-                      ? _buildDirectionalUI(data.azimuth!, data.elevation!, data.distance)
-                      : _buildLostDirectionUI(), // 方向を見失った時のUI
+                const SizedBox(height: 40),
+
+                // 記録用操作ボタン
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (!_isRecording)
+                      ElevatedButton.icon(
+                        onPressed: _startRecording,
+                        icon: const Icon(Icons.play_arrow, color: Colors.white),
+                        label: const Text('記録開始'),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                      )
+                    else
+                      ElevatedButton.icon(
+                        onPressed: _stopAndSaveRecording,
+                        icon: const Icon(Icons.stop, color: Colors.white),
+                        label: const Text('記録停止・保存'),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
+                      ),
+                  ],
+                ),
+                if (_isRecording)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Text('記録中: ${_recordedRows.length} 件', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                   ),
-                  const SizedBox(height: 30),
+              ],
+            ),
+          ),
+    );
+  }
 
-                  // --- 数値データの詳細表示 ---
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: Column(
-                      children: [
-                        const Text('距離 (Distance)', style: TextStyle(color: Colors.grey)),
-                        Text('$formattedDistance m', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold)),
-                        const Divider(height: 30),
-                        
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            _buildAngleText('水平 (左右)', data.azimuth),
-                            _buildAngleText('垂直 (上下)', data.elevation),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
+  Widget _buildDataCard(UwbData data) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Column(
+        children: [
+          const Text('距離 (Distance)', style: TextStyle(color: Colors.grey)),
+          Text('${data.distance.toStringAsFixed(2)} m', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold)),
+          const Divider(height: 30),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildAngleText('水平', data.azimuth),
+              _buildAngleText('垂直', data.elevation),
+            ],
+          ),
+        ],
       ),
     );
   }
