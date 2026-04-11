@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:io';
+import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -136,7 +137,8 @@ class _UwbRadarScreenState extends State<UwbRadarScreen> {
     final header = 'relative_timestamp_ms,device_id,distance_m,azimuth_deg,elevation_deg';
     final csvContent = [header, ..._recordedRows].join('\n');
     final directory = await getApplicationDocumentsDirectory();
-    final fileName = 'uwb_recording_${DateTime.now().millisecondsSinceEpoch}.csv';
+    final String timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+    final fileName = 'uwb_record_$timestamp.csv';
     final file = File('${directory.path}/$fileName');
     await file.writeAsString(csvContent);
 
