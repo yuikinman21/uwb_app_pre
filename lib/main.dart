@@ -118,6 +118,14 @@ class _UwbRadarScreenState extends State<UwbRadarScreen> {
     });
   }
 
+  void _startRecording() {
+    setState(() {
+      _recordedData.clear();
+      _startTime = DateTime.now();
+      _isRecording = true;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
