@@ -99,7 +99,7 @@ class _UwbRadarScreenState extends State<UwbRadarScreen> {
 
   bool _isRecording = false;
   DateTime? _startTime;
-  List<String> _recordedRows = [];
+  final List<String> _recordedRows = [];
 
   @override
   void initState() {
