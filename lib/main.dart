@@ -99,7 +99,7 @@ class _UwbRadarScreenState extends State<UwbRadarScreen> {
 
   bool _isRecording = false;
   DateTime? _startTime;
-  List<String> _recordedData = [];
+  List<String> _recordedRows = [];
 
   @override
   void initState() {
@@ -113,18 +113,28 @@ class _UwbRadarScreenState extends State<UwbRadarScreen> {
         final now = DateTime.now();
         final relativeTimestamp = now.difference(_startTime!).inMilliseconds;
         final row = '$relativeTimestamp, ${data.deviceId}, ${data.distance}, ${data.azimuth ?? ''}, ${data.elevation ?? ''}';
-        _recordedData.add(row);
+        _recordedRows.add(row);
       }
     });
   }
 
   void _startRecording() {
     setState(() {
-      _recordedData.clear();
+      _recordedRows.clear();
       _startTime = DateTime.now();
       _isRecording = true;
     });
   }
+
+  Future<void> _stopAndSaveRecording() async {
+    if(_recordedRows.isEmpty) return;
+
+    setState(() {
+      _isRecording = false;
+    });
+  }
+
+
 
   @override
   Widget build(BuildContext context) {
