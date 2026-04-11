@@ -139,6 +139,11 @@ class _UwbRadarScreenState extends State<UwbRadarScreen> {
     final fileName = 'uwb_recording_${DateTime.now().millisecondsSinceEpoch}.csv';
     final file = File('${directory.path}/$fileName');
     await file.writeAsString(csvContent);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Recording saved: $fileName')),
+    );
   }
 
 
