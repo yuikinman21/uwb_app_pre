@@ -154,11 +154,18 @@ class _UwbRadarScreenState extends State<UwbRadarScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final data = _currentData;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Nearby Interaction Mock'),
         backgroundColor: Colors.black87,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(icon: const Icon(Icons.history), onPressed: () {
+            // ここに履歴画面へのナビゲーションを追加
+          },),
+        ],
       ),
       body: Center(
         child: StreamBuilder<UwbData>(
