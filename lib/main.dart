@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 void main() {
   runApp(const MyApp());
@@ -164,9 +165,15 @@ class _UwbRadarScreenState extends State<UwbRadarScreen> {
         backgroundColor: Colors.black87,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(icon: const Icon(Icons.history), onPressed: () {
-            // ここに履歴画面へのナビゲーションを追加
-          },),
+          IconButton(
+            icon: const Icon(Icons.history),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const RecordHistoryScreen()),
+              );
+            },
+          ),
         ],
       ),
       body: data == null 
@@ -300,6 +307,84 @@ class _UwbRadarScreenState extends State<UwbRadarScreen> {
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: angle != null ? Colors.black : Colors.grey),
         ),
       ],
+    );
+  }
+}
+
+class RecordHistoryScreen extends StatefulWidget {
+  const RecordHistoryScreen({super.key});
+
+  @override
+  State<RecordHistoryScreen> createState() => _RecordHistoryScreenState();
+}
+
+class _RecordHistoryScreenState extends State<RecordHistoryScreen> {
+  List<File> _csvFiles = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFiles();
+  }
+
+  // 保存されたファイル一覧を取得
+  Future<void> _loadFiles() async {
+    final directory = await getApplicationDocumentsDirectory();
+    final List<FileSystemEntity> entities = directory.listSync();
+    
+    setState(() {
+      _csvFiles = entities
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.csv'))
+          .toList()
+        ..sort((a, b) => b.path.compareTo(a.path)); // 新しい順に並び替え
+    });
+  }
+
+  // AirDrop / 共有を実行
+  Future<void> _shareFile(File file) async {
+    final xFile = XFile(file.path);
+    await Share.shareXFiles([xFile], text: 'UWB Record Data');
+  }
+
+  // ファイル削除
+  Future<void> _deleteFile(File file) async {
+    await file.delete();
+    _loadFiles(); // リストを更新
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('記録履歴')),
+      body: _csvFiles.isEmpty
+          ? const Center(child: Text('保存されたデータはありません'))
+          : ListView.builder(
+              itemCount: _csvFiles.length,
+              itemBuilder: (context, index) {
+                final file = _csvFiles[index];
+                final fileName = file.path.split('/').last;
+                
+                return ListTile(
+                  leading: const Icon(Icons.insert_drive_file, color: Colors.green),
+                  title: Text(fileName),
+                  subtitle: Text('${(file.lengthSync() / 1024).toStringAsFixed(2)} KB'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.share, color: Colors.blue),
+                        onPressed: () => _shareFile(file),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _deleteFile(file),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
     );
   }
 }
