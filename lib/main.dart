@@ -132,6 +132,13 @@ class _UwbRadarScreenState extends State<UwbRadarScreen> {
     setState(() {
       _isRecording = false;
     });
+
+    final header = 'relative_timestamp_ms,device_id,distance_m,azimuth_deg,elevation_deg';
+    final csvContent = [header, ..._recordedRows].join('\n');
+    final directory = await getApplicationDocumentsDirectory();
+    final fileName = 'uwb_recording_${DateTime.now().millisecondsSinceEpoch}.csv';
+    final file = File('${directory.path}/$fileName');
+    await file.writeAsString(csvContent);
   }
 
 
