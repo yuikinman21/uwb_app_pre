@@ -146,7 +146,11 @@ class _UwbRadarScreenState extends State<UwbRadarScreen> {
     );
   }
 
-
+  @override
+  void dispose() {
+    _streamSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
