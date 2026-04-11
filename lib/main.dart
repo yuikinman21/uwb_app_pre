@@ -82,10 +82,17 @@ class MockUwbService {
 }
 
 // 3. 全データを視覚化するUI
-class UwbRadarScreen extends StatelessWidget {
-  final MockUwbService _uwbService = MockUwbService();
+class UwbRadarScreen extends StatefulWidget {
+  // final MockUwbService _uwbService = MockUwbService();
 
-  UwbRadarScreen({super.key});
+  const UwbRadarScreen({super.key});
+
+  @override
+  State<UwbRadarScreen> createState() => _UwbRadarScreenState();
+}
+
+class _UwbRadarScreenState extends State<UwbRadarScreen> {
+  final MockUwbService _uwbService = MockUwbService();
 
   @override
   Widget build(BuildContext context) {
