@@ -94,6 +94,30 @@ class UwbRadarScreen extends StatefulWidget {
 class _UwbRadarScreenState extends State<UwbRadarScreen> {
   final MockUwbService _uwbService = MockUwbService();
 
+  StreamSubscription<UwbData>? _streamSubscription;
+  UwbData? _currentData;
+
+  bool _isRecording = false;
+  DateTime? _startTime;
+  List<String> _recordedData = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _streamSubscription = _uwbService.uwbStream.listen((data) {
+      setState(() {
+        _currentData = data;
+      });
+
+      if (_isRecording && _startTime != null) {
+        final now = DateTime.now();
+        final relativeTimestamp = now.difference(_startTime!).inMilliseconds;
+        final row = '$relativeTimestamp, ${data.deviceId}, ${data.distance}, ${data.azimuth ?? ''}, ${data.elevation ?? ''}';
+        _recordedData.add(row);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
