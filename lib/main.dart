@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:io';
+import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 void main() {
   runApp(const MyApp());
@@ -80,78 +84,175 @@ class MockUwbService {
 }
 
 // 3. 全データを視覚化するUI
-class UwbRadarScreen extends StatelessWidget {
+class UwbRadarScreen extends StatefulWidget {
+  // final MockUwbService _uwbService = MockUwbService();
+
+  const UwbRadarScreen({super.key});
+
+  @override
+  State<UwbRadarScreen> createState() => _UwbRadarScreenState();
+}
+
+class _UwbRadarScreenState extends State<UwbRadarScreen> {
   final MockUwbService _uwbService = MockUwbService();
 
-  UwbRadarScreen({super.key});
+  StreamSubscription<UwbData>? _streamSubscription;
+  UwbData? _currentData;
+
+  bool _isRecording = false;
+  DateTime? _startTime;
+  final List<String> _recordedRows = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _streamSubscription = _uwbService.uwbStream.listen((data) {
+      setState(() {
+        _currentData = data;
+      });
+
+      if (_isRecording && _startTime != null) {
+        final now = DateTime.now();
+        final relativeTimestamp = now.difference(_startTime!).inMilliseconds;
+        final row = '$relativeTimestamp, ${data.deviceId}, ${data.distance}, ${data.azimuth ?? ''}, ${data.elevation ?? ''}';
+        _recordedRows.add(row);
+      }
+    });
+  }
+
+  void _startRecording() {
+    setState(() {
+      _recordedRows.clear();
+      _startTime = DateTime.now();
+      _isRecording = true;
+    });
+  }
+
+  Future<void> _stopAndSaveRecording() async {
+    if(_recordedRows.isEmpty) return;
+
+    setState(() {
+      _isRecording = false;
+    });
+
+    final header = 'relative_timestamp_ms,device_id,distance_m,azimuth_deg,elevation_deg';
+    final csvContent = [header, ..._recordedRows].join('\n');
+    final directory = await getApplicationDocumentsDirectory();
+    final String timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+    final fileName = 'uwb_record_$timestamp.csv';
+    final file = File('${directory.path}/$fileName');
+    await file.writeAsString(csvContent);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Recording saved: $fileName')),
+    );
+  }
+
+  @override
+  void dispose() {
+    _streamSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final data = _currentData;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Nearby Interaction Mock'),
         backgroundColor: Colors.black87,
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const RecordHistoryScreen()),
+              );
+            },
+          ),
+        ],
       ),
-      body: Center(
-        child: StreamBuilder<UwbData>(
-          stream: _uwbService.uwbStream,
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) return const CircularProgressIndicator();
+      body: data == null 
+        ? const Center(child: CircularProgressIndicator())
+        : Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('Target: ${data.deviceId}', style: const TextStyle(color: Colors.grey)),
+                const SizedBox(height: 20),
 
-            final data = snapshot.data!;
-            final formattedDistance = data.distance.toStringAsFixed(2);
-            
-            // 方向データが取得できているか（nullじゃないか）
-            final hasDirection = data.azimuth != null && data.elevation != null;
+                // 視覚的UI
+                SizedBox(
+                  height: 180,
+                  child: data.azimuth != null 
+                    ? _buildDirectionalUI(data.azimuth!, data.elevation!, data.distance)
+                    : _buildLostDirectionUI(),
+                ),
+                
+                const SizedBox(height: 30),
 
-            return Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // --- デバイス情報 ---
-                  Text('Target: ${data.deviceId}', style: const TextStyle(color: Colors.grey)),
-                  const SizedBox(height: 20),
+                // 数値データエリア
+                _buildDataCard(data),
 
-                  // --- 視覚的フィードバックエリア ---
-                  SizedBox(
-                    height: 200,
-                    child: hasDirection 
-                      ? _buildDirectionalUI(data.azimuth!, data.elevation!, data.distance)
-                      : _buildLostDirectionUI(), // 方向を見失った時のUI
+                const SizedBox(height: 40),
+
+                // 記録用操作ボタン
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (!_isRecording)
+                      ElevatedButton.icon(
+                        onPressed: _startRecording,
+                        icon: const Icon(Icons.play_arrow, color: Colors.white),
+                        label: const Text('記録開始'),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                      )
+                    else
+                      ElevatedButton.icon(
+                        onPressed: _stopAndSaveRecording,
+                        icon: const Icon(Icons.stop, color: Colors.white),
+                        label: const Text('記録停止・保存'),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
+                      ),
+                  ],
+                ),
+                if (_isRecording)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Text('記録中: ${_recordedRows.length} 件', style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
                   ),
-                  const SizedBox(height: 30),
+              ],
+            ),
+          ),
+    );
+  }
 
-                  // --- 数値データの詳細表示 ---
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: Column(
-                      children: [
-                        const Text('距離 (Distance)', style: TextStyle(color: Colors.grey)),
-                        Text('$formattedDistance m', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold)),
-                        const Divider(height: 30),
-                        
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            _buildAngleText('水平 (左右)', data.azimuth),
-                            _buildAngleText('垂直 (上下)', data.elevation),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
+  Widget _buildDataCard(UwbData data) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Column(
+        children: [
+          const Text('距離 (Distance)', style: TextStyle(color: Colors.grey)),
+          Text('${data.distance.toStringAsFixed(2)} m', style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold)),
+          const Divider(height: 30),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildAngleText('水平', data.azimuth),
+              _buildAngleText('垂直', data.elevation),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -206,6 +307,84 @@ class UwbRadarScreen extends StatelessWidget {
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: angle != null ? Colors.black : Colors.grey),
         ),
       ],
+    );
+  }
+}
+
+class RecordHistoryScreen extends StatefulWidget {
+  const RecordHistoryScreen({super.key});
+
+  @override
+  State<RecordHistoryScreen> createState() => _RecordHistoryScreenState();
+}
+
+class _RecordHistoryScreenState extends State<RecordHistoryScreen> {
+  List<File> _csvFiles = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFiles();
+  }
+
+  // 保存されたファイル一覧を取得
+  Future<void> _loadFiles() async {
+    final directory = await getApplicationDocumentsDirectory();
+    final List<FileSystemEntity> entities = directory.listSync();
+    
+    setState(() {
+      _csvFiles = entities
+          .whereType<File>()
+          .where((file) => file.path.endsWith('.csv'))
+          .toList()
+        ..sort((a, b) => b.path.compareTo(a.path)); // 新しい順に並び替え
+    });
+  }
+
+  // AirDrop / 共有を実行
+  Future<void> _shareFile(File file) async {
+    final xFile = XFile(file.path);
+    await Share.shareXFiles([xFile], text: 'UWB Record Data');
+  }
+
+  // ファイル削除
+  Future<void> _deleteFile(File file) async {
+    await file.delete();
+    _loadFiles(); // リストを更新
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('記録履歴')),
+      body: _csvFiles.isEmpty
+          ? const Center(child: Text('保存されたデータはありません'))
+          : ListView.builder(
+              itemCount: _csvFiles.length,
+              itemBuilder: (context, index) {
+                final file = _csvFiles[index];
+                final fileName = file.path.split('/').last;
+                
+                return ListTile(
+                  leading: const Icon(Icons.insert_drive_file, color: Colors.green),
+                  title: Text(fileName),
+                  subtitle: Text('${(file.lengthSync() / 1024).toStringAsFixed(2)} KB'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.share, color: Colors.blue),
+                        onPressed: () => _shareFile(file),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _deleteFile(file),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
     );
   }
 }
